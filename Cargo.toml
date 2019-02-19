@@ -4,4 +4,6 @@ version = "0.1.0"
 authors = ["Ted Spence <ted@spence.net>"]
 edition = "2018"
 
-[dependencies]
+[dependencies.rusqlite]
+version = "*"
+features = ["bundled"]
