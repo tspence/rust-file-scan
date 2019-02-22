@@ -1,6 +1,6 @@
 table! {
     files (id) {
-        id -> Nullable<Integer>,
+        id -> Integer,
         folder_id -> Integer,
         name -> Text,
         hash -> Text,
@@ -11,8 +11,8 @@ table! {
 
 table! {
     folders (id) {
-        id -> Nullable<Integer>,
-        parent_id -> Nullable<Integer>,
+        id -> Integer,
+        parent_id -> Integer,
         name -> Text,
     }
 }

@@ -1,14 +1,13 @@
-mod list_files; 
-mod files_data;
+mod lib;
 
-pub mod schema;
-pub mod models;
+extern crate diesel;
+extern crate dotenv;
 
 fn main() {
     
     // Initialize sqlite
-    let connection = files_data::establish_connection();
+    let connection = lib::establish_connection();
 
     // Start by scanning subfolders of current
-    list_files::list_files_in_folder(connection, "./".to_string(), 0);
+    lib::list_files_in_folder(connection, "./".to_string(), 0);
 }
