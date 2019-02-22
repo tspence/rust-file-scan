@@ -1,63 +1,55 @@
-extern crate rusqlite;
+#[macro_use]
 
-use rusqlite::{Connection, Result, NO_PARAMS};
+extern crate diesel;
+extern crate dotenv;
 
-static mut conn: Option<rusqlite::Connection> = None;
+use diesel::prelude::*;
+use diesel::pg::PgConnection;
+use dotenv::dotenv;
+use std::env;
 
-pub fn setup() -> Result<()> {
+pub fn establish_connection() -> PgConnection {
+    dotenv().ok();
 
-    // Open the database
-    println!("Initializing database...");
-    let local = Connection::open("filescan.db").unwrap();
-
-    // Create the folder table
-    local.execute(
-        "create table if not exists folders (
-             id integer primary key,
-             parent_id integer null,
-             name text not null
-         )",
-        NO_PARAMS,
-    )?;
-
-    // Create the file table
-    local.execute(
-        "create table if not exists files (
-             id integer primary key,
-             parent_id integer,
-             name text not null,
-             size integer,
-             modified_date text not null
-         )",
-        NO_PARAMS,
-    )?;
-
-    // Done
-    unsafe {
-        conn = Some(local);
-    }
-    return Ok(());
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    PgConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
 }
 
-pub fn add_folder(path: String) -> Result<()> {
-    let mut stmt = try!(conn.prepare("INSERT INTO folders (name) VALUES (:name)"));
-    stmt.execute_named(&[(":name", path)])
+pub fn create_folder<'a>(conn: &PgConnection, name: &'a str, parent_id: &'a i32) -> FolderModel {
+    use schema::folders;
+
+    let new_folder = NewFolder<'a> {
+        name: name,
+        parent_id: parent_id,
+    };
+
+    diesel::insert_into(folders::table)
+        .values(&new_folder)
+        .get_result(conn)
+        .expect("Error saving new folder")
 }
 
-pub fn add_file(path: String) -> Result<()> {
-    let mut stmt = try!(conn.prepare("INSERT INTO folders (name) VALUES (:name)"));
-    stmt.execute_named(&[(":name", path)])
-}
+pub fn create_file<'a>(conn: &PgConnection, 
+    name: &'a str, 
+    folder_id: &'a i32, 
+    hash: &'a str,
+    size: &'a i64,
+    modified_date: &'a str,) -> FileModel {
 
-pub fn report() -> Result<()> {
-    /*unsafe {
-        match &conn {
-            None => (),
-            Some(v) => {
-                v.close();
-            },
-        }
-    }*/
-    println!("Done");
-    return Ok(());
+    use schema::files;
+
+    let new_file = NewFile<'a> {
+        name: name,
+        folder_id: folder_id,
+        hash: hash,
+        size: size,
+        modified_date: modified_date,
+    };
+
+    diesel::insert_into(files::table)
+        .values(&new_file)
+        .get_result(conn)
+        .expect("Error saving new file")
 }
