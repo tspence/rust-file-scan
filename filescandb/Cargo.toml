@@ -1,5 +1,5 @@
 [package]
-name = "rust-file-scan"
+name = "filescandb"
 version = "0.1.0"
 authors = ["Ted Spence <ted@spence.net>"]
 edition = "2018"
@@ -7,4 +7,4 @@ edition = "2018"
 [dependencies]
 diesel = { version = "*", features = ["sqlite", "chrono"] }
 dotenv = "*"
-filescandb = { path = "filescandb" }
+libsqlite3-sys = { version = "*", features = ["bundled"] }

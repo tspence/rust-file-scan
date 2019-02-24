@@ -1,13 +1,14 @@
-mod lib;
-
 extern crate diesel;
 extern crate dotenv;
+
+use filescandb;
+
 
 fn main() {
     
     // Initialize sqlite
-    let connection = lib::establish_connection();
+    let connection = filescandb::establish_connection();
 
     // Start by scanning subfolders of current
-    lib::list_files_in_folder(connection, "./".to_string(), 0);
+    filescandb::list_files_in_folder(&connection, "./".to_string(), 0);
 }
