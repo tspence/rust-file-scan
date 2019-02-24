@@ -1,161 +1,93 @@
-#[macro_use]
-extern crate diesel;
 extern crate dotenv;
+extern crate rusqlite;
 
-use diesel::prelude::*;
-use diesel::sqlite::Sqlite;
-use diesel::expression::sql_literal::sql;
 use dotenv::dotenv;
 use std::env;
 
-table! {
-    files (id) {
-        id -> Integer,
-        folder_id -> Integer,
-        name -> Text,
-        hash -> Text,
-        size -> Integer,
-        modified_date -> Text,
-    }
-}
+use rusqlite::{ Connection };
 
-table! {
-    folders (id) {
-        id -> Integer,
-        parent_id -> Integer,
-        name -> Text,
-    }
-}
 
-allow_tables_to_appear_in_same_query!(
-    files,
-    folders,
-);
-
-#[derive(Queryable)]
+#[derive(Debug)]
 pub struct FolderModel {
     pub id: i32,
     pub parent_id: i32,
     pub name: String,
 }
 
-#[derive(Queryable)]
+#[derive(Debug)]
 pub struct FileModel {
     pub id: i32,
     pub folder_id: i32,
     pub name: String,
     pub hash: String,
-    pub size: i32,
+    pub size: i64,
     pub modified_date: String,
 }
 
-#[derive(Insertable)]
-#[table_name="folders"]
-pub struct NewFolder<'a> {
-    pub name: &'a str,
-    pub parent_id: &'a i32,
-}
-
-#[derive(Insertable)]
-#[table_name="files"]
-pub struct NewFile<'a> {
-    pub name: &'a str,
-    pub folder_id: &'a i32,
-    pub hash: &'a str,
-    pub size: &'a i32,
-    pub modified_date: &'a str,
-}
-
-
-static g_next_file_id: Option<i32> = None;
-static g_next_folder_id: Option<i32> = None;
-
-
-pub fn get_next_file_id(conn: &SqliteConnection) 
-{
-    if (g_next_file_id == None) {
-        let g_next_file_id = sql("select max(id) from files;")
-            .get_result(&conn)
-            .expect("Error executing raw SQL")
-            + 1;
-    }
-
-    // Increment
-    let num = g_next_file_id.unwrap();
-    g_next_file_id = num + 1;
-    return num;
-}
-
-pub fn get_next_folder_id(conn: &SqliteConnection) 
-{
-    if (g_next_folder_id == None) {
-        let g_next_folder_id = sql("select max(id) from folders;")
-            .get_result(&conn)
-            .expect("Error executing raw SQL")
-            + 1;
-    }
-
-    // Increment
-    let num = g_next_folder_id.unwrap();
-    g_next_folder_id = num + 1;
-    return num;
-}
-
-pub fn establish_connection() -> SqliteConnection 
+pub fn establish_connection() -> Connection 
 {
     dotenv().ok();
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
+    let db_path = env::var("DATABASE_PATH")
+        .expect("DATABASE_PATH must be set");
+    let conn = Connection::open(db_path).unwrap();
+
+    // Folders table
+    conn.execute_batch("create table if not exists folders (
+        id integer primary key not null,
+        parent_id integer not null,
+        name text not null
+    );").unwrap();
+
+    // Files table
+    conn.execute_batch("create table if not exists files (
+        id integer primary key not null,
+        folder_id integer not null,
+        name text not null,
+        hash text not null,
+        size integer not null,
+        modified_date text not null
+    );").unwrap();
+
+    return conn;
 }
 
-pub fn create_folder<'a>(conn: &SqliteConnection, name: &'a str, parent_id: i32) -> i32 
+pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64) 
+    -> i64
 {
+    let r = conn.execute_named(
+        "INSERT INTO folders (name, parent_id) VALUES (:name, :parent_id);",
+        &[(":name", &name), (":parent_id", &parent_id)],
+    );
 
-    let new_folder = NewFolder {
-        id: get_next_folder_id(conn),
-        name: name,
-        parent_id: &parent_id,
-    };
-
-    let r = diesel::insert_into(folders::table)
-        .values(&new_folder)
-        .execute(conn)
-        .unwrap();
-
-    return new_folder.id;
+    match r {
+        Ok(updated) => return conn.last_insert_rowid(),
+        Err(err) => return 0,
+    }
 }
 
-pub fn create_file<'a>(conn: &SqliteConnection, 
-    name: &'a str, 
-    folder_id: i32, 
-    hash: &'a str,
-    size: i32,
-    modified_date: &'a str,) -> i32 
+pub fn create_file<'a>(conn: &Connection, name: String, folder_id: i64, hash: String, size: i64, modified_date: String) 
+    -> i64
 {
+    let r = conn.execute_named(
+        "INSERT INTO files (name, folder_id, hash, size, modified_date) 
+        VALUES (:name, :folder_id, :hash, :size, :modified_date",
+        &[(":name", &name), 
+        (":folder_id", &folder_id),
+        (":hash", &hash),
+        (":size", &size),
+        (":modified_date", &modified_date),
+        ]
+    );
 
-    let new_file = NewFile {
-        id: get_next_file_id(conn),
-        name: name,
-        folder_id: &folder_id,
-        hash: hash,
-        size: &size,
-        modified_date: modified_date,
-    };
-
-    let r = diesel::insert_into(files::table)
-        .values(&new_file)
-        .execute(conn)
-        .unwrap();
-
-    return new_file.id;
+    match r {
+        Ok(updated) => return conn.last_insert_rowid(),
+        Err(err) => return 0,
+    }
 }
 
-pub fn list_files_in_folder(conn: &SqliteConnection, path: String, parent_id: i32) 
+pub fn list_files_in_folder(conn: &Connection, path: String, parent_id: i64) 
 {
-
     // Get a list of all things in this directory
     println!("Scanning: {} ({})", path, parent_id);
     let dirlist = std::fs::read_dir(path).unwrap();
@@ -163,7 +95,7 @@ pub fn list_files_in_folder(conn: &SqliteConnection, path: String, parent_id: i3
     // Let's go into them
     for entry in dirlist {
         let child_path = entry.unwrap().path();
-        let name = child_path.file_name().unwrap().to_str().unwrap();
+        let name = child_path.file_name().unwrap().to_str().unwrap().to_string();
         if child_path.is_dir() {
 
             // Add this directory first
@@ -171,7 +103,7 @@ pub fn list_files_in_folder(conn: &SqliteConnection, path: String, parent_id: i3
             list_files_in_folder(conn, child_path.to_str().unwrap().to_string(), folder_id);
         } else if parent_id != 0 {
             let md = child_path.metadata().unwrap();
-            let file_id = create_file(conn, name, parent_id, "", 0, "");
+            let file_id = create_file(conn, name, parent_id, "".to_string(), 0, "".to_string());
             println!("Name: {} ({})", child_path.to_str().unwrap().to_string(), file_id);
         }
     }

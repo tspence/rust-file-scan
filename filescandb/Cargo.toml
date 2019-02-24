@@ -5,6 +5,5 @@ authors = ["Ted Spence <ted@spence.net>"]
 edition = "2018"
 
 [dependencies]
-diesel = { version = "*", features = ["sqlite", "chrono"] }
+rusqlite = { version = "*", features = ["bundled"] }
 dotenv = "*"
-libsqlite3-sys = { version = "*", features = ["bundled"] }

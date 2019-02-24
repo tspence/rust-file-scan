@@ -1,4 +1,3 @@
-extern crate diesel;
 extern crate dotenv;
 
 use filescandb;
