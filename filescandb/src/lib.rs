@@ -4,29 +4,39 @@ extern crate chrono;
 
 use chrono::offset::Utc;
 use chrono::DateTime;
-use std::time::SystemTime;
-use chrono::prelude::*;
 use dotenv::dotenv;
 use std::env;
 
 use rusqlite::{ Connection };
 
-
-#[derive(Debug)]
-pub struct FolderModel {
-    pub id: i32,
-    pub parent_id: i32,
-    pub name: String,
-}
-
 #[derive(Debug)]
 pub struct FileModel {
     pub id: i32,
-    pub folder_id: i32,
+    pub parent_folder_id: i32,
     pub name: String,
     pub hash: String,
     pub size: u64,
     pub modified_date: String,
+}
+
+#[derive(Debug)]
+pub struct FolderModel {
+    pub id: i32,
+    pub parent_folder_id: i32,
+    pub name: String,
+
+    pub folders: Vec<FolderModel>,
+    pub files: Vec<FileModel>,
+}
+
+pub fn total_items(f: &FolderModel) 
+    -> usize
+{
+    let mut count = 1 + f.files.len();
+    for child in &(f.folders) {
+        count = count + total_items(&child);
+    }
+    return count;
 }
 
 pub fn establish_connection() -> Connection 
@@ -40,14 +50,14 @@ pub fn establish_connection() -> Connection
     // Folders table
     conn.execute_batch("create table if not exists folders (
         id integer primary key not null,
-        parent_id integer not null,
+        parent_folder_id integer not null,
         name text not null
     );").unwrap();
 
     // Files table
     conn.execute_batch("create table if not exists files (
         id integer primary key not null,
-        folder_id integer not null,
+        parent_folder_id integer not null,
         name text not null,
         hash text not null,
         size integer not null,
@@ -57,6 +67,13 @@ pub fn establish_connection() -> Connection
     return conn;
 }
 
+pub fn write(folder: &FolderModel) 
+    -> ()
+{
+    let conn = establish_connection();
+}
+
+/*
 pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64) 
     -> i64
 {
@@ -74,15 +91,15 @@ pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64)
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, name: String, folder_id: i64, hash: String, size: u64, modified_date: String) 
+pub fn create_file<'a>(conn: &Connection, na me: String, folder_id: i64, hash: String, size: u64, modified_date: String) 
     -> i64
 {
     let size_i64 = size as i64;
     let r = conn.execute_named(
-        "INSERT INTO files (name, folder_id, hash, size, modified_date) 
-        VALUES (:name, :folder_id, :hash, :size, :modified_date)",
+        "INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
+        VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)",
         &[(":name", &name), 
-        (":folder_id", &folder_id),
+        (":parent_folder_id", &parent_folder_id),
         (":hash", &hash),
         (":size", &size_i64),
         (":modified_date", &modified_date),
@@ -97,29 +114,71 @@ pub fn create_file<'a>(conn: &Connection, name: String, folder_id: i64, hash: St
         }
     }
 }
+*/
 
-pub fn list_files_in_folder(conn: &Connection, path: String, parent_id: i64) 
+pub fn list_files_in_folder(path: String) 
+    -> Result<FolderModel, String>
 {
+    // Start our result
+    let mut parent_folder = FolderModel {
+        id: 0,
+        parent_folder_id: 0,
+        name: path.to_string(),
+        folders: Vec::<FolderModel>::new(),
+        files: Vec::<FileModel>::new()
+    };
+
     // Get a list of all things in this directory
-    println!("Scanning: {} ({})", path, parent_id);
-    let dirlist = std::fs::read_dir(path).unwrap();
+    //try!(let mut dirlist = std::fs::read_dir(path).map_err(|e| e.to_string()));
+    let try_dirlist = std::fs::read_dir(path);
+    match try_dirlist {
+        Err(e) => return Err(e.to_string()),
+        Ok(dirlist) =>
 
-    // Let's go into them
-    for entry in dirlist {
-        let child_path = entry.unwrap().path();
-        let name = child_path.file_name().unwrap().to_str().unwrap().to_string();
-        if child_path.is_dir() {
+            // Let's go into all children
+            for tryentry in dirlist {
 
-            // Add this directory first
-            let folder_id = create_folder(conn, name, parent_id);
-            list_files_in_folder(conn, child_path.to_str().unwrap().to_string(), folder_id);
-        } else if parent_id != 0 {
-            let md = child_path.metadata().unwrap();
-            let size = md.len();
-            let timestamp = md.modified().unwrap();
-            let chrono_datetime_obj: DateTime<Utc> = timestamp.into();
-            let chrono_time = chrono_datetime_obj.format("%+").to_string();
-            let _file_id = create_file(conn, name, parent_id, "".to_string(), size, chrono_time);
-        }
+                // Figure out path and name
+                let entry = tryentry.unwrap();
+                let file_type = entry.file_type().unwrap();
+                let child_path = entry.path();
+                let name = child_path.file_name().unwrap().to_str().unwrap().to_string();
+
+                // If it's a directory, it goes in one place
+                if file_type.is_dir() {
+                    let child_folder = list_files_in_folder(child_path.to_str().unwrap().to_string());
+                    match child_folder {
+                        Err(e) => return Err(e),
+                        Ok(val) => parent_folder.folders.push(val),
+                    }
+
+                // Otherwise capture files
+                } else if file_type.is_file() {
+                    let trymd = child_path.metadata();
+                    match trymd {
+                        Err(e) => println!("Cannot observe metadata for {}: {}", child_path.to_str().unwrap(), e.to_string()),
+                        Ok(md) => {
+                            let size = md.len();
+                            //let timestamp = md.modified().unwrap();
+                            //let chrono_datetime_obj: DateTime<Utc> = timestamp.into();
+                            //let chrono_time = chrono_datetime_obj.format("%+").to_string();
+                            let file = FileModel {
+                                id: 0,
+                                parent_folder_id: 0,
+                                name: name,
+                                hash: "".to_string(),
+                                size: size,
+                                modified_date: "".to_string()//chrono_time,
+                            };
+                            parent_folder.files.push(file);
+
+                        }
+                    }
+                }
+            },
     }
+
+
+    // Here's the folder
+    return Ok(parent_folder);
 }
