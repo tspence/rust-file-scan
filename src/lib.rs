@@ -3,24 +3,25 @@ extern crate diesel;
 extern crate dotenv;
 
 pub mod schema;
-pub mod models;
 
 use diesel::prelude::*;
+use diesel::insert_into;
 use dotenv::dotenv;
 use std::env;
 
-use self::models::{NewFolder, FolderModel, NewFile, FileModel};
+use models;
+use schema;
 
-pub fn establish_connection() -> PgConnection {
+pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
 
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
+    Connection::establish(&database_url)
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-pub fn create_folder<'a>(conn: &PgConnection, name: &'a str, parent_id: i32) -> FolderModel {
+pub fn create_folder<'a>(conn: &SqliteConnection, name: &'a str, parent_id: i32) -> i32 {
 
     let new_folder = NewFolder {
         name: name,
@@ -29,16 +30,16 @@ pub fn create_folder<'a>(conn: &PgConnection, name: &'a str, parent_id: i32) -> 
 
     diesel::insert_into(schema::folders::table)
         .values(&new_folder)
-        .get_result(conn)
-        .expect("Error saving new folder")
+        .execute(conn);
+    return 0;
 }
 
-pub fn create_file<'a>(conn: &PgConnection, 
+pub fn create_file<'a>(conn: &SqliteConnection, 
     name: &'a str, 
     folder_id: i32, 
     hash: &'a str,
     size: i32,
-    modified_date: &'a str,) -> FileModel {
+    modified_date: &'a str,) -> i32 {
 
     let new_file = NewFile {
         name: name,
@@ -50,11 +51,11 @@ pub fn create_file<'a>(conn: &PgConnection,
 
     diesel::insert_into(schema::files::table)
         .values(&new_file)
-        .get_result(conn)
-        .expect("Error saving new file")
+        .execute(conn);
+    return 0;
 }
 
-pub fn list_files_in_folder(conn: &PgConnection, path: String, parent_id: i32) {
+pub fn list_files_in_folder(conn: &SqliteConnection, path: String, parent_id: i32) {
 
     // Get a list of all things in this directory
     let dirlist = std::fs::read_dir(path).unwrap();
@@ -66,11 +67,11 @@ pub fn list_files_in_folder(conn: &PgConnection, path: String, parent_id: i32) {
         if path.is_dir() {
 
             // Add this directory first
-            let folder = create_folder(conn, name, parent_id);
-            list_files_in_folder(conn, path.to_str().unwrap().to_string(), folder.id);
+            let this_folder_id = create_folder(conn, name, parent_id);
+            list_files_in_folder(conn, path.to_str().unwrap().to_string(), this_folder_id);
         } else if parent_id != 0 {
-            let md = path.metadata().unwrap();
-            let file = create_file(conn, name, parent_id, "", 0, "");
+            let _md = path.metadata().unwrap();
+            let _file = create_file(conn, name, parent_id, "", 0, "");
             println!("Name: {}", path.to_str().unwrap().to_string());
         }
     }
