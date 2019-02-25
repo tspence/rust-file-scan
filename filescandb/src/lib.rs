@@ -1,6 +1,11 @@
 extern crate dotenv;
 extern crate rusqlite;
+extern crate chrono;
 
+use chrono::offset::Utc;
+use chrono::DateTime;
+use std::time::SystemTime;
+use chrono::prelude::*;
 use dotenv::dotenv;
 use std::env;
 
@@ -20,7 +25,7 @@ pub struct FileModel {
     pub folder_id: i32,
     pub name: String,
     pub hash: String,
-    pub size: i64,
+    pub size: u64,
     pub modified_date: String,
 }
 
@@ -61,28 +66,35 @@ pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64)
     );
 
     match r {
-        Ok(updated) => return conn.last_insert_rowid(),
-        Err(err) => return 0,
+        Ok(_updated) => return conn.last_insert_rowid(),
+        Err(err) => {
+            println!("Error: {}", err);
+            return 0;
+        }
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, name: String, folder_id: i64, hash: String, size: i64, modified_date: String) 
+pub fn create_file<'a>(conn: &Connection, name: String, folder_id: i64, hash: String, size: u64, modified_date: String) 
     -> i64
 {
+    let size_i64 = size as i64;
     let r = conn.execute_named(
         "INSERT INTO files (name, folder_id, hash, size, modified_date) 
-        VALUES (:name, :folder_id, :hash, :size, :modified_date",
+        VALUES (:name, :folder_id, :hash, :size, :modified_date)",
         &[(":name", &name), 
         (":folder_id", &folder_id),
         (":hash", &hash),
-        (":size", &size),
+        (":size", &size_i64),
         (":modified_date", &modified_date),
         ]
     );
 
     match r {
-        Ok(updated) => return conn.last_insert_rowid(),
-        Err(err) => return 0,
+        Ok(_updated) => return conn.last_insert_rowid(),
+        Err(err) => {
+            println!("Error: {}", err);
+            return 0;
+        }
     }
 }
 
@@ -103,8 +115,11 @@ pub fn list_files_in_folder(conn: &Connection, path: String, parent_id: i64)
             list_files_in_folder(conn, child_path.to_str().unwrap().to_string(), folder_id);
         } else if parent_id != 0 {
             let md = child_path.metadata().unwrap();
-            let file_id = create_file(conn, name, parent_id, "".to_string(), 0, "".to_string());
-            println!("Name: {} ({})", child_path.to_str().unwrap().to_string(), file_id);
+            let size = md.len();
+            let timestamp = md.modified().unwrap();
+            let chrono_datetime_obj: DateTime<Utc> = timestamp.into();
+            let chrono_time = chrono_datetime_obj.format("%+").to_string();
+            let _file_id = create_file(conn, name, parent_id, "".to_string(), size, chrono_time);
         }
     }
 }
