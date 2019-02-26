@@ -10,18 +10,22 @@ fn main()
     let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource".to_string());
     match folder_result {
         Err(e) => println!("Err: {}", e.to_string()),
-        Ok(folder) => {
+        Ok(mut folder) => {
             let elapsed = now.elapsed();
             let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-            println!("Captured {} file and folder records in {} seconds.", filescandb::total_items(&folder), sec);
+            println!("Captured {} file and folder records in {} seconds.", folder.total_items(), sec);
+
+            // Prepare to begin working on the database
+            let mut conn = filescandb::establish_connection();
 
             // Now insert items into the database
             let now = Instant::now();
-            let mut newfolder = folder;
-            filescandb::write(&mut newfolder);
+            filescandb::write_to_database(&mut conn, &mut folder);
             let elapsed = now.elapsed();
+
+            // Print results
             let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-            println!("Inserted {} items into the database in {} seconds.", filescandb::total_items(&newfolder), sec);    
+            println!("Inserted {} items into the database in {} seconds.", folder.total_items(), sec);    
         }
     }
 }
