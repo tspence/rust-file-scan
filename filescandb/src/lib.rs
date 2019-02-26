@@ -5,7 +5,8 @@ extern crate chrono;
 use dotenv::dotenv;
 use std::env;
 
-use rusqlite::{ Connection, Transaction };
+use rusqlite::{ Connection, Transaction, Statement };
+use chrono::*;
 
 #[derive(Debug)]
 pub struct FileModel {
@@ -44,6 +45,10 @@ pub fn establish_connection() -> Connection
     let db_path = env::var("DATABASE_PATH")
         .expect("DATABASE_PATH must be set");
     let conn = Connection::open(db_path).unwrap();
+
+    // clean tables
+    conn.execute_batch("drop table if exists files;").unwrap();
+    conn.execute_batch("drop table if exists folders;").unwrap();
 
     // Folders table
     conn.execute_batch("create table if not exists folders (
@@ -137,7 +142,7 @@ pub fn create_file<'a>(conn: &Connection, name: String, parent_folder_id: i64, h
 }
 
 pub fn list_files_in_folder(path: String) 
-    -> Result<FolderModel, String>
+    -> Result<FolderModel, std::io::Error>
 {
     // Start our result
     let mut parent_folder = FolderModel {
@@ -150,52 +155,49 @@ pub fn list_files_in_folder(path: String)
 
     // Get a list of all things in this directory
     //try!(let mut dirlist = std::fs::read_dir(path).map_err(|e| e.to_string()));
-    let try_dirlist = std::fs::read_dir(path);
-    match try_dirlist {
-        Err(e) => return Err(e.to_string()),
-        Ok(dirlist) =>
+    let dirlist = std::fs::read_dir(path)?;
 
-            // Let's go into all children
-            for tryentry in dirlist {
+    // Let's go into all children
+    for tryentry in dirlist {
 
-                // Figure out path and name
-                let entry = tryentry.unwrap();
-                let file_type = entry.file_type().unwrap();
-                let child_path = entry.path();
-                let name = child_path.file_name().unwrap().to_str().unwrap().to_string();
+        // Figure out path and name
+        let entry = tryentry.unwrap();
+        let file_type = entry.file_type().unwrap();
+        let child_path = entry.path();
+        let name = child_path.file_name().unwrap().to_str().unwrap().to_string();
 
-                // If it's a directory, it goes in one place
-                if file_type.is_dir() {
-                    let child_folder = list_files_in_folder(child_path.to_str().unwrap().to_string());
-                    match child_folder {
-                        Err(e) => return Err(e),
-                        Ok(val) => parent_folder.folders.push(val),
-                    }
+        // If it's a directory, it goes in one place
+        if file_type.is_dir() {
+            let child_folder = list_files_in_folder(child_path.to_str().unwrap().to_string());
+            match child_folder {
+                Err(e) => println!("Cannot observe folder {}: {}", child_path.to_str().unwrap(), e.to_string()),
+                Ok(val) => parent_folder.folders.push(val),
+            }
 
-                // Otherwise capture files
-                } else if file_type.is_file() {
-                    let trymd = child_path.metadata();
-                    match trymd {
-                        Err(e) => println!("Cannot observe metadata for {}: {}", child_path.to_str().unwrap(), e.to_string()),
-                        Ok(md) => {
-                            let size = md.len();
-                            //let timestamp = md.modified().unwrap();
-                            //let chrono_datetime_obj: DateTime<Utc> = timestamp.into();
-                            //let chrono_time = chrono_datetime_obj.format("%+").to_string();
-                            let file = FileModel {
-                                id: 0,
-                                parent_folder_id: 0,
-                                name: name,
-                                hash: "".to_string(),
-                                size: size,
-                                modified_date: "".to_string()//chrono_time,
-                            };
-                            parent_folder.files.push(file);
+        // Otherwise capture files
+        } else if file_type.is_file() {
+            let trymd = child_path.metadata();
+            match trymd {
+                Err(e) => println!("Cannot observe metadata for {}: {}", child_path.to_str().unwrap(), e.to_string()),
+                Ok(md) => {
+                    let size = md.len();
+                    let timestamp = md.modified().unwrap();
+                    let chrono_time: DateTime<Utc> = timestamp.into();
+                    let file = FileModel {
+                        id: 0,
+                        parent_folder_id: 0,
+                        name: name,
+                        hash: "".to_string(),
+                        size: size,
+                        modified_date: chrono_time.to_rfc3339(),
+                    };
+                    parent_folder.files.push(file);
 
-                        }
-                    }
                 }
-            },
+            }
+        } else {
+            println!("Cannot observe {}: Neither file nor directory.", name);
+        }
     }
 
 
