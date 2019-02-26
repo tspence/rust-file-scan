@@ -2,17 +2,15 @@ extern crate dotenv;
 extern crate rusqlite;
 extern crate chrono;
 
-use chrono::offset::Utc;
-use chrono::DateTime;
 use dotenv::dotenv;
 use std::env;
 
-use rusqlite::{ Connection };
+use rusqlite::{ Connection, Transaction };
 
 #[derive(Debug)]
 pub struct FileModel {
-    pub id: i32,
-    pub parent_folder_id: i32,
+    pub id: i64,
+    pub parent_folder_id: i64,
     pub name: String,
     pub hash: String,
     pub size: u64,
@@ -21,8 +19,8 @@ pub struct FileModel {
 
 #[derive(Debug)]
 pub struct FolderModel {
-    pub id: i32,
-    pub parent_folder_id: i32,
+    pub id: i64,
+    pub parent_folder_id: i64,
     pub name: String,
 
     pub folders: Vec<FolderModel>,
@@ -67,20 +65,43 @@ pub fn establish_connection() -> Connection
     return conn;
 }
 
-pub fn write(folder: &FolderModel) 
+pub fn write(folder: &mut FolderModel) 
     -> ()
 {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
+    let mut tx = conn.transaction().unwrap();
+
+    internal_write(&mut tx, folder);
+
+    let _r = tx.commit().unwrap();
 }
 
-/*
-pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64) 
+pub fn internal_write(conn: &mut Transaction, folder: &mut FolderModel)
+    -> ()
+{
+    // Insert this folder
+    let id = create_folder(conn, folder.name.clone(), folder.parent_folder_id);
+    folder.id = id;
+
+    // Insert all files within this folder
+    for mut child_file in &mut folder.files {
+        child_file.parent_folder_id = id;
+        create_file(conn, child_file.name.clone(), id, child_file.hash.clone(), child_file.size, child_file.modified_date.clone());
+    }
+
+    // Insert all child folders
+    for mut child_folder in &mut folder.folders {
+        child_folder.parent_folder_id = id;
+        internal_write(conn, &mut child_folder);
+    }
+}
+
+
+pub fn create_folder<'a>(conn: &mut Transaction, name: String, parent_folder_id: i64) 
     -> i64
 {
-    let r = conn.execute_named(
-        "INSERT INTO folders (name, parent_id) VALUES (:name, :parent_id);",
-        &[(":name", &name), (":parent_id", &parent_id)],
-    );
+    let mut stmt = conn.prepare_cached("INSERT INTO folders (name, parent_folder_id) VALUES (:name, :parent_folder_id);").unwrap();
+    let r = stmt.execute_named(&[(":name", &name), (":parent_folder_id", &parent_folder_id)]);
 
     match r {
         Ok(_updated) => return conn.last_insert_rowid(),
@@ -91,13 +112,13 @@ pub fn create_folder<'a>(conn: &Connection, name: String, parent_id: i64)
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, na me: String, folder_id: i64, hash: String, size: u64, modified_date: String) 
+pub fn create_file<'a>(conn: &Connection, name: String, parent_folder_id: i64, hash: String, size: u64, modified_date: String) 
     -> i64
 {
+    let mut stmt = conn.prepare_cached("INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
+        VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)").unwrap();
     let size_i64 = size as i64;
-    let r = conn.execute_named(
-        "INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
-        VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)",
+    let r = stmt.execute_named(
         &[(":name", &name), 
         (":parent_folder_id", &parent_folder_id),
         (":hash", &hash),
@@ -114,7 +135,6 @@ pub fn create_file<'a>(conn: &Connection, na me: String, folder_id: i64, hash: S
         }
     }
 }
-*/
 
 pub fn list_files_in_folder(path: String) 
     -> Result<FolderModel, String>
