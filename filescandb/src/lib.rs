@@ -85,13 +85,13 @@ pub fn internal_write(conn: &mut Transaction, folder: &mut FolderModel)
     -> ()
 {
     // Insert this folder
-    let id = create_folder(conn, folder.name.clone(), folder.parent_folder_id);
+    let id = create_folder(conn, &folder.name, folder.parent_folder_id);
     folder.id = id;
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        create_file(conn, child_file.name.clone(), id, child_file.hash.clone(), child_file.size, child_file.modified_date.clone());
+        create_file(conn, &child_file.name, id, &child_file.hash, child_file.size, &child_file.modified_date);
     }
 
     // Insert all child folders
@@ -102,11 +102,11 @@ pub fn internal_write(conn: &mut Transaction, folder: &mut FolderModel)
 }
 
 
-pub fn create_folder<'a>(conn: &mut Transaction, name: String, parent_folder_id: i64) 
+pub fn create_folder<'a>(conn: &mut Transaction, name: &String, parent_folder_id: i64) 
     -> i64
 {
     let mut stmt = conn.prepare_cached("INSERT INTO folders (name, parent_folder_id) VALUES (:name, :parent_folder_id);").unwrap();
-    let r = stmt.execute_named(&[(":name", &name), (":parent_folder_id", &parent_folder_id)]);
+    let r = stmt.execute_named(&[(":name", name), (":parent_folder_id", &parent_folder_id)]);
 
     match r {
         Ok(_updated) => return conn.last_insert_rowid(),
@@ -117,18 +117,18 @@ pub fn create_folder<'a>(conn: &mut Transaction, name: String, parent_folder_id:
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, name: String, parent_folder_id: i64, hash: String, size: u64, modified_date: String) 
+pub fn create_file<'a>(conn: &Connection, name: &String, parent_folder_id: i64, hash: &String, size: u64, modified_date: &String) 
     -> i64
 {
     let mut stmt = conn.prepare_cached("INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
         VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)").unwrap();
     let size_i64 = size as i64;
     let r = stmt.execute_named(
-        &[(":name", &name), 
+        &[(":name", name), 
         (":parent_folder_id", &parent_folder_id),
-        (":hash", &hash),
+        (":hash", hash),
         (":size", &size_i64),
-        (":modified_date", &modified_date),
+        (":modified_date", modified_date),
         ]
     );
 
@@ -154,7 +154,6 @@ pub fn list_files_in_folder(path: String)
     };
 
     // Get a list of all things in this directory
-    //try!(let mut dirlist = std::fs::read_dir(path).map_err(|e| e.to_string()));
     let dirlist = std::fs::read_dir(path)?;
 
     // Let's go into all children
@@ -192,11 +191,10 @@ pub fn list_files_in_folder(path: String)
                         modified_date: chrono_time.to_rfc3339(),
                     };
                     parent_folder.files.push(file);
-
                 }
             }
         } else {
-            println!("Cannot observe {}: Neither file nor directory.", name);
+            //println!("Cannot observe {}: Neither file nor directory.", name);
         }
     }
 

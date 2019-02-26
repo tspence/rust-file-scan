@@ -7,7 +7,7 @@ fn main()
 {    
     // Start by scanning subfolders of current
     let now = Instant::now();
-    let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource/fbcode".to_string());
+    let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource".to_string());
     match folder_result {
         Err(e) => println!("Err: {}", e.to_string()),
         Ok(folder) => {
