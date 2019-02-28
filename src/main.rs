@@ -4,10 +4,13 @@ use filescandb;
 use std::time::Instant;
 
 fn main() 
-{    
+{
+    // Get a handle to the database
+    let DbContext = filescandb::establish_connection("rust-filescan.db");
+
     // Start by scanning subfolders of current
     let now = Instant::now();
-    let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource".to_string());
+    let folder_result = filescandb::filescan::list_files_in_folder("/users/tspence/fbsource".to_string());
     match folder_result {
         Err(e) => println!("Err: {}", e.to_string()),
         Ok(mut folder) => {
