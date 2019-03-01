@@ -94,7 +94,7 @@ pub fn internal_write(conn: &Transaction, folder: &mut FolderModel)
 }
 
 
-pub fn create_folder<'a>(conn: &Transaction, folder: &mut FolderModel) 
+pub fn create_folder(conn: &Transaction, folder: &mut FolderModel) 
     -> i64
 {
     let mut folder_stmt = conn.prepare_cached("INSERT INTO folders (name, parent_folder_id) VALUES (:name, :parent_folder_id);").unwrap();
@@ -109,7 +109,7 @@ pub fn create_folder<'a>(conn: &Transaction, folder: &mut FolderModel)
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, file: &mut FileModel) 
+pub fn create_file(conn: &Connection, file: &mut FileModel) 
     -> i64
 {
     let mut file_stmt = conn.prepare_cached("INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
