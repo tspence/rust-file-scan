@@ -1,91 +1,56 @@
-#[macro_use]
 extern crate lazy_static;
 extern crate dotenv;
 extern crate rusqlite;
 extern crate chrono;
 
-use std::sync::Mutex;
 use rusqlite::{ Connection, Transaction, Statement };
 use chrono::*;
 
 pub mod models;
+pub mod context;
 
-lazy_static! {
-    static ref RustFileScanDbConnection: Mutex<Connection> = Mutex::new(Connection::open("rust-filescan.db").unwrap());
-}
 
-pub fn initialize_database() -> ()
-{
-    let conn = RustFileScanDbConnection.lock().unwrap();
-
-    // clean tables
-    conn.execute_batch("drop table if exists files;").unwrap();
-    conn.execute_batch("drop table if exists folders;").unwrap();
-
-    // Folders table
-    conn.execute_batch("create table if not exists folders (
-        id integer primary key not null,
-        parent_folder_id integer not null,
-        name text not null
-    );").unwrap();
-
-    // Files table
-    conn.execute_batch("create table if not exists files (
-        id integer primary key not null,
-        parent_folder_id integer not null,
-        name text not null,
-        hash text not null,
-        size integer not null,
-        modified_date text not null
-    );").unwrap();
-}
 
 pub fn write_folder_nested(folder: &mut models::FolderModel) 
     -> ()
 {
-    let mut conn = RustFileScanDbConnection.lock().unwrap();
-    let tx = conn.transaction().unwrap(); 
+    let mut conn = Connection::open("rustfilescan.db").unwrap();
+    let ctxt = context::RustFileScanDbContext::new(&conn);
+    conn.execute_batch("BEGIN TRANSACTION;").unwrap();
 
-    // Prepare statements and insert sql as fast as possible
-    {
-        let mut folder_stmt = tx.prepare_cached("INSERT INTO folders (name, parent_folder_id) VALUES (:name, :parent_folder_id);").unwrap();
-        let mut file_stmt = tx.prepare_cached("INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
-            VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)").unwrap();
-
-        internal_write(&tx, &mut folder_stmt, &mut file_stmt, folder);
-    }
+    internal_write(&ctxt, folder);
 
     // Commit the transaction
-    let _r = tx.commit().unwrap();
+    conn.execute_batch("COMMIT TRANSACTION;").unwrap();
 }
 
-pub fn internal_write(conn: &Transaction, folder_stmt: &mut Statement, file_stmt: &mut Statement, folder: &mut models::FolderModel)
+pub fn internal_write(ctxt: &context::RustFileScanDbContext, folder: &mut models::FolderModel)
     -> ()
 {
     // Insert this folder
-    let id = create_folder(conn, folder_stmt, folder);
+    let id = create_folder(ctxt, folder);
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        create_file(conn, file_stmt, child_file);
+        create_file(ctxt, child_file);
     }
 
     // Insert all child folders
     for mut child_folder in &mut folder.folders {
         child_folder.parent_folder_id = id;
-        internal_write(conn, folder_stmt, file_stmt, child_folder);
+        internal_write(ctxt, child_folder);
     }
 }
 
-pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &mut models::FolderModel) 
+pub fn create_folder(ctxt: &context::RustFileScanDbContext, folder: &mut models::FolderModel) 
     -> i64
 {
-    let r = folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
+    let r = ctxt.insert_folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
 
     match r {
         Ok(_updated) => {
-            let id = conn.last_insert_rowid();
+            let id = ctxt.conn.last_insert_rowid();
             folder.id = id;
             return id;
         },
@@ -96,11 +61,11 @@ pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &m
     }
 }
 
-pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &mut models::FileModel) 
+pub fn create_file(ctxt: &context::RustFileScanDbContext, file: &mut models::FileModel) 
     -> i64
 {
     let size_i64 = file.size as i64;
-    let r = file_stmt.execute_named(
+    let r = ctxt.insert_file_stmt.execute_named(
         &[(":name", &file.name), 
         (":parent_folder_id", &file.parent_folder_id),
         (":hash", &file.hash),
@@ -111,7 +76,7 @@ pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &mut mode
 
     match r {
         Ok(_updated) => {
-            let id = conn.last_insert_rowid();
+            let id = ctxt.conn.last_insert_rowid();
             file.id = id;
             return id;
         },
