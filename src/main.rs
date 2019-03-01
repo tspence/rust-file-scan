@@ -9,7 +9,7 @@ fn main()
 {    
     // Start by scanning subfolders of current
     let now = Instant::now();
-    let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource".to_string());
+    let folder_result = filescandb::list_files_in_folder("/users/tspence/fbsource/fbcode".to_string());
     match folder_result {
         Err(e) => println!("Err: {}", e.to_string()),
         Ok(mut folder) => {
@@ -19,9 +19,7 @@ fn main()
 
             // Prepare to begin working on the database
             {
-                let conn = Connection::open("rustfilescan.db").unwrap();
-                let ctxt = filescandb::context::RustFileScanDbContext::new(&conn);
-                ctxt.initialize();
+                filescandb::context::initialize_database();
             }
 
             // Now insert items into the database

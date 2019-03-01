@@ -28,62 +28,18 @@ pub fn internal_write(ctxt: &mut context::RustFileScanDbContext, folder: &mut mo
     -> ()
 {
     // Insert this folder
-    let id = create_folder(ctxt, folder);
+    let id = ctxt.create_folder(folder);
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        create_file(ctxt, child_file);
+        ctxt.create_file(child_file);
     }
 
     // Insert all child folders
     for mut child_folder in &mut folder.folders {
         child_folder.parent_folder_id = id;
         internal_write(ctxt, child_folder);
-    }
-}
-
-pub fn create_folder(ctxt: &mut context::RustFileScanDbContext, folder: &mut models::FolderModel) 
-    -> i64
-{
-    let r = ctxt.insert_folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
-
-    match r {
-        Ok(_updated) => {
-            let id = ctxt.conn.last_insert_rowid();
-            folder.id = id;
-            return id;
-        },
-        Err(err) => {
-            println!("Error: {}", err);
-            return 0;
-        }
-    }
-}
-
-pub fn create_file(ctxt: &mut context::RustFileScanDbContext, file: &mut models::FileModel) 
-    -> i64
-{
-    let size_i64 = file.size as i64;
-    let r = ctxt.insert_file_stmt.execute_named(
-        &[(":name", &file.name), 
-        (":parent_folder_id", &file.parent_folder_id),
-        (":hash", &file.hash),
-        (":size", &size_i64),
-        (":modified_date", &file.modified_date),
-        ]
-    );
-
-    match r {
-        Ok(_updated) => {
-            let id = ctxt.conn.last_insert_rowid();
-            file.id = id;
-            return id;
-        },
-        Err(err) => {
-            println!("Error: {}", err);
-            return 0;
-        }
     }
 }
 
