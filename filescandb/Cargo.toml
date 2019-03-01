@@ -8,3 +8,4 @@ edition = "2018"
 rusqlite = { version = "*", features = ["bundled"] }
 dotenv = "*"
 chrono = "*"
+lazy_static = "*"

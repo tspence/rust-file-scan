@@ -1,50 +1,22 @@
+#[macro_use]
+extern crate lazy_static;
 extern crate dotenv;
 extern crate rusqlite;
 extern crate chrono;
 
+use std::sync::Mutex;
 use rusqlite::{ Connection, Transaction, Statement };
 use chrono::*;
 
-#[derive(Debug)]
-pub struct FileModel {
-    pub id: i64,
-    pub parent_folder_id: i64,
-    pub name: String,
-    pub hash: String,
-    pub size: u64,
-    pub modified_date: String,
-}
+pub mod models;
 
-#[derive(Debug)]
-pub struct FolderModel {
-    pub id: i64,
-    pub parent_folder_id: i64,
-    pub name: String,
-
-    pub folders: Vec<FolderModel>,
-    pub files: Vec<FileModel>,
-}
-
-impl FolderModel {
-    pub fn total_items(&self)
-        -> usize
-    {
-        let mut count = 1 + self.files.len();
-        for child in &(self.folders) {
-            count = count + child.total_items();
-        }
-        return count;
-    }
-}
-
-pub fn establish_connection() -> Connection 
-{
-    return Connection::open("rust-filescan.db").unwrap();
+lazy_static! {
+    static ref RustFileScanDbConnection: Mutex<Connection> = Mutex::new(Connection::open("rust-filescan.db").unwrap());
 }
 
 pub fn initialize_database() -> ()
 {
-    let conn = establish_connection();
+    let conn = RustFileScanDbConnection.lock().unwrap();
 
     // clean tables
     conn.execute_batch("drop table if exists files;").unwrap();
@@ -68,10 +40,10 @@ pub fn initialize_database() -> ()
     );").unwrap();
 }
 
-pub fn write_folder_nested(folder: &mut FolderModel) 
+pub fn write_folder_nested(folder: &mut models::FolderModel) 
     -> ()
 {
-    let mut conn = establish_connection();
+    let mut conn = RustFileScanDbConnection.lock().unwrap();
     let tx = conn.transaction().unwrap(); 
 
     // Prepare statements and insert sql as fast as possible
@@ -87,34 +59,36 @@ pub fn write_folder_nested(folder: &mut FolderModel)
     let _r = tx.commit().unwrap();
 }
 
-pub fn internal_write(conn: &Transaction, folder_stmt: &mut Statement, file_stmt: &mut Statement, folder: &mut FolderModel)
+pub fn internal_write(conn: &Transaction, folder_stmt: &mut Statement, file_stmt: &mut Statement, folder: &mut models::FolderModel)
     -> ()
 {
     // Insert this folder
-    let id = create_folder(conn, folder_stmt, &folder);
-    folder.id = id;
+    let id = create_folder(conn, folder_stmt, folder);
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        create_file(conn, file_stmt, &child_file);
+        create_file(conn, file_stmt, child_file);
     }
 
     // Insert all child folders
     for mut child_folder in &mut folder.folders {
         child_folder.parent_folder_id = id;
-        internal_write(conn, folder_stmt, file_stmt, &mut child_folder);
+        internal_write(conn, folder_stmt, file_stmt, child_folder);
     }
 }
 
-
-pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &FolderModel) 
+pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &mut models::FolderModel) 
     -> i64
 {
     let r = folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
 
     match r {
-        Ok(_updated) => return conn.last_insert_rowid(),
+        Ok(_updated) => {
+            let id = conn.last_insert_rowid();
+            folder.id = id;
+            return id;
+        },
         Err(err) => {
             println!("Error: {}", err);
             return 0;
@@ -122,7 +96,7 @@ pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &F
     }
 }
 
-pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &FileModel) 
+pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &mut models::FileModel) 
     -> i64
 {
     let size_i64 = file.size as i64;
@@ -136,7 +110,11 @@ pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &FileMode
     );
 
     match r {
-        Ok(_updated) => return conn.last_insert_rowid(),
+        Ok(_updated) => {
+            let id = conn.last_insert_rowid();
+            file.id = id;
+            return id;
+        },
         Err(err) => {
             println!("Error: {}", err);
             return 0;
@@ -145,15 +123,15 @@ pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &FileMode
 }
 
 pub fn list_files_in_folder(path: String) 
-    -> Result<FolderModel, std::io::Error>
+    -> Result<models::FolderModel, std::io::Error>
 {
     // Start our result
-    let mut parent_folder = FolderModel {
+    let mut parent_folder = models::FolderModel {
         id: 0,
         parent_folder_id: 0,
         name: path.to_string(),
-        folders: Vec::<FolderModel>::new(),
-        files: Vec::<FileModel>::new()
+        folders: Vec::<models::FolderModel>::new(),
+        files: Vec::<models::FileModel>::new()
     };
 
     // Get a list of all things in this directory
@@ -185,7 +163,7 @@ pub fn list_files_in_folder(path: String)
                     let size = md.len();
                     let timestamp = md.modified().unwrap();
                     let chrono_time: DateTime<Utc> = timestamp.into();
-                    let file = FileModel {
+                    let file = models::FileModel {
                         id: 0,
                         parent_folder_id: 0,
                         name: name,
