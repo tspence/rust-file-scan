@@ -39,7 +39,12 @@ impl FolderModel {
 
 pub fn establish_connection() -> Connection 
 {
-    let conn = Connection::open("rust-filescan.db").unwrap();
+    return Connection::open("rust-filescan.db").unwrap();
+}
+
+pub fn initialize_database() -> ()
+{
+    let conn = establish_connection();
 
     // clean tables
     conn.execute_batch("drop table if exists files;").unwrap();
@@ -61,13 +66,12 @@ pub fn establish_connection() -> Connection
         size integer not null,
         modified_date text not null
     );").unwrap();
-
-    return conn;
 }
 
-pub fn write_to_database(conn: &mut Connection, folder: &mut FolderModel) 
+pub fn write_folder_nested(folder: &mut FolderModel) 
     -> ()
 {
+    let mut conn = establish_connection();
     let tx = conn.transaction().unwrap(); 
 
     // Prepare statements and insert sql as fast as possible
@@ -87,13 +91,13 @@ pub fn internal_write(conn: &Transaction, folder_stmt: &mut Statement, file_stmt
     -> ()
 {
     // Insert this folder
-    let id = create_folder(conn, folder_stmt, &folder.name, folder.parent_folder_id);
+    let id = create_folder(conn, folder_stmt, &folder);
     folder.id = id;
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        create_file(conn, file_stmt, &child_file.name, id, &child_file.hash, child_file.size, &child_file.modified_date);
+        create_file(conn, file_stmt, &child_file);
     }
 
     // Insert all child folders
@@ -104,10 +108,10 @@ pub fn internal_write(conn: &Transaction, folder_stmt: &mut Statement, file_stmt
 }
 
 
-pub fn create_folder<'a>(conn: &Transaction, folder_stmt: &mut Statement, name: &String, parent_folder_id: i64) 
+pub fn create_folder(conn: &Transaction, folder_stmt: &mut Statement, folder: &FolderModel) 
     -> i64
 {
-    let r = folder_stmt.execute_named(&[(":name", name), (":parent_folder_id", &parent_folder_id)]);
+    let r = folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
 
     match r {
         Ok(_updated) => return conn.last_insert_rowid(),
@@ -118,16 +122,16 @@ pub fn create_folder<'a>(conn: &Transaction, folder_stmt: &mut Statement, name: 
     }
 }
 
-pub fn create_file<'a>(conn: &Connection, file_stmt: &mut Statement, name: &String, parent_folder_id: i64, hash: &String, size: u64, modified_date: &String) 
+pub fn create_file(conn: &Connection, file_stmt: &mut Statement, file: &FileModel) 
     -> i64
 {
-    let size_i64 = size as i64;
+    let size_i64 = file.size as i64;
     let r = file_stmt.execute_named(
-        &[(":name", name), 
-        (":parent_folder_id", &parent_folder_id),
-        (":hash", hash),
+        &[(":name", &file.name), 
+        (":parent_folder_id", &file.parent_folder_id),
+        (":hash", &file.hash),
         (":size", &size_i64),
-        (":modified_date", modified_date),
+        (":modified_date", &file.modified_date),
         ]
     );
 

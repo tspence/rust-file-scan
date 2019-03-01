@@ -16,11 +16,11 @@ fn main()
             println!("Captured {} file and folder records in {} seconds.", folder.total_items(), sec);
 
             // Prepare to begin working on the database
-            let mut conn = filescandb::establish_connection();
+            filescandb::initialize_database();
 
             // Now insert items into the database
             let now = Instant::now();
-            filescandb::write_to_database(&mut conn, &mut folder);
+            filescandb::write_folder_nested(&mut folder);
             let elapsed = now.elapsed();
 
             // Print results
