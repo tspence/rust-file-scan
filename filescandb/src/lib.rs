@@ -3,7 +3,7 @@ extern crate dotenv;
 extern crate rusqlite;
 extern crate chrono;
 
-use rusqlite::{ Connection, Transaction, Statement };
+use rusqlite::{ Connection, };
 use chrono::*;
 
 pub mod models;
@@ -14,17 +14,17 @@ pub mod context;
 pub fn write_folder_nested(folder: &mut models::FolderModel) 
     -> ()
 {
-    let mut conn = Connection::open("rustfilescan.db").unwrap();
-    let ctxt = context::RustFileScanDbContext::new(&conn);
+    let conn = Connection::open("rustfilescan.db").unwrap();
+    let mut ctxt = context::RustFileScanDbContext::new(&conn);
     conn.execute_batch("BEGIN TRANSACTION;").unwrap();
 
-    internal_write(&ctxt, folder);
+    internal_write(&mut ctxt, folder);
 
     // Commit the transaction
     conn.execute_batch("COMMIT TRANSACTION;").unwrap();
 }
 
-pub fn internal_write(ctxt: &context::RustFileScanDbContext, folder: &mut models::FolderModel)
+pub fn internal_write(ctxt: &mut context::RustFileScanDbContext, folder: &mut models::FolderModel)
     -> ()
 {
     // Insert this folder
@@ -43,7 +43,7 @@ pub fn internal_write(ctxt: &context::RustFileScanDbContext, folder: &mut models
     }
 }
 
-pub fn create_folder(ctxt: &context::RustFileScanDbContext, folder: &mut models::FolderModel) 
+pub fn create_folder(ctxt: &mut context::RustFileScanDbContext, folder: &mut models::FolderModel) 
     -> i64
 {
     let r = ctxt.insert_folder_stmt.execute_named(&[(":name", &folder.name), (":parent_folder_id", &folder.parent_folder_id)]);
@@ -61,7 +61,7 @@ pub fn create_folder(ctxt: &context::RustFileScanDbContext, folder: &mut models:
     }
 }
 
-pub fn create_file(ctxt: &context::RustFileScanDbContext, file: &mut models::FileModel) 
+pub fn create_file(ctxt: &mut context::RustFileScanDbContext, file: &mut models::FileModel) 
     -> i64
 {
     let size_i64 = file.size as i64;

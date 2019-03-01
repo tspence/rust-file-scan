@@ -1,6 +1,8 @@
 extern crate dotenv;
+extern crate rusqlite;
 
 use filescandb;
+use rusqlite::{ Connection, };
 use std::time::Instant;
 
 fn main() 
@@ -16,7 +18,11 @@ fn main()
             println!("Captured {} file and folder records in {} seconds.", folder.total_items(), sec);
 
             // Prepare to begin working on the database
-            filescandb::initialize_database();
+            {
+                let conn = Connection::open("rustfilescan.db").unwrap();
+                let ctxt = filescandb::context::RustFileScanDbContext::new(&conn);
+                ctxt.initialize();
+            }
 
             // Now insert items into the database
             let now = Instant::now();
