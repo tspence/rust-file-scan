@@ -26,10 +26,20 @@ fn main()
             let now = Instant::now();
             filescandb::write_folder_nested(&mut folder);
             let elapsed = now.elapsed();
-
-            // Print results
             let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
             println!("Inserted {} items into the database in {} seconds.", folder.total_items(), sec);    
+
+            // Read an item back
+            {
+                let conn = Connection::open("rustfilescan.db").unwrap();
+                let mut ctxt = filescandb::context::RustFileScanDbContext::new(&conn);
+                let mut read_back = ctxt.retrieve_folder(folder.id).unwrap();
+                println!("Comparing {} {} to read back {} {}", folder.id, folder.name, read_back.id, read_back.name);
+                read_back.name = read_back.name + " hi mom!";
+                ctxt.update_folder(&read_back).unwrap();
+                let read_back2 = ctxt.retrieve_folder(folder.id).unwrap();
+                println!("Comparing {} {} to readback2: {} {}", folder.id, folder.name, read_back2.id, read_back2.name);
+            }
         }
     }
 }

@@ -66,8 +66,8 @@ impl<'a> RustFileScanDbContext<'a>
             let row = maybe_row?;
             let obj = models::FolderModel {
                 id: row.get(0),
-                parent_folder_id: row.get(1),
-                name: row.get(2),
+                name: row.get(1),
+                parent_folder_id: row.get(2),
                 folders: Vec::<models::FolderModel>::new(),
                 files: Vec::<models::FileModel>::new(),
             };
@@ -77,7 +77,7 @@ impl<'a> RustFileScanDbContext<'a>
         return Err(Error::QueryReturnedNoRows);
     }
 
-    pub fn update_folder(&mut self, folder: &mut models::FolderModel) 
+    pub fn update_folder(&mut self, folder: &models::FolderModel) 
         -> Result<(), Error>
     {
         if let None = &self.folder_update_stmt {
@@ -92,7 +92,7 @@ impl<'a> RustFileScanDbContext<'a>
         return Ok(());
     }
 
-    pub fn delete_folder(&mut self, folder: &mut models::FolderModel) 
+    pub fn delete_folder(&mut self, id: i64) 
         -> Result<(), Error>
     {
         if let None = &self.folder_delete_stmt {
@@ -101,7 +101,7 @@ impl<'a> RustFileScanDbContext<'a>
         };
 
         self.folder_delete_stmt.as_mut().unwrap().execute_named(
-            &[(":id", &folder.id)])?;
+            &[(":id", &id)])?;
         return Ok(());
     }
 
