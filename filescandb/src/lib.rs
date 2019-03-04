@@ -28,12 +28,12 @@ pub fn internal_write(ctxt: &mut context::RustFileScanDbContext, folder: &mut mo
     -> ()
 {
     // Insert this folder
-    let id = ctxt.create_folder(folder);
+    let id = ctxt.create_folder(folder).unwrap();
 
     // Insert all files within this folder
     for mut child_file in &mut folder.files {
         child_file.parent_folder_id = id;
-        ctxt.create_file(child_file);
+        ctxt.create_file(child_file).unwrap();
     }
 
     // Insert all child folders
@@ -52,7 +52,7 @@ pub fn list_files_in_folder(path: String)
         parent_folder_id: 0,
         name: path.to_string(),
         folders: Vec::<models::FolderModel>::new(),
-        files: Vec::<models::FileModel>::new()
+        files: Vec::<models::FileModel>::new(),
     };
 
     // Get a list of all things in this directory

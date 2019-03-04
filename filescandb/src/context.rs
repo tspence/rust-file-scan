@@ -1,13 +1,19 @@
 extern crate rusqlite;
 
-use rusqlite::{ Connection, Statement };
+use rusqlite::{ Connection, Statement, Error };
 
 use crate::models;
 
 pub struct RustFileScanDbContext<'a> {
-    pub conn: &'a Connection,
-    pub insert_folder_stmt: Option<Statement<'a>>,
-    pub insert_file_stmt: Option<Statement<'a>>,
+    conn: &'a Connection,
+    folder_create_stmt: Option<Statement<'a>>,
+    folder_retrieve_stmt: Option<Statement<'a>>,
+    folder_update_stmt: Option<Statement<'a>>,
+    folder_delete_stmt: Option<Statement<'a>>,
+    file_create_stmt: Option<Statement<'a>>,
+    file_retrieve_stmt: Option<Statement<'a>>,
+    file_update_stmt: Option<Statement<'a>>,
+    file_delete_stmt: Option<Statement<'a>>,
 }
 
 impl<'a> RustFileScanDbContext<'a>
@@ -17,66 +23,110 @@ impl<'a> RustFileScanDbContext<'a>
         // Here you go
         return RustFileScanDbContext {
             conn,
-            insert_file_stmt: None,
-            insert_folder_stmt: None,
+            folder_create_stmt: None,
+            folder_retrieve_stmt: None,
+            folder_update_stmt: None,
+            folder_delete_stmt: None,
+            file_create_stmt: None,
+            file_retrieve_stmt: None,
+            file_update_stmt: None,
+            file_delete_stmt: None,
         };
     }
 
     pub fn create_folder(&mut self, folder: &mut models::FolderModel) 
-        -> i64
+        -> Result<i64, Error>
     {
-        if let None = &self.insert_folder_stmt {
+        if let None = &self.folder_create_stmt {
             let stmt = self.conn.prepare("INSERT INTO folders (name, parent_folder_id) VALUES (:name, :parent_folder_id);").unwrap();
-            self.insert_folder_stmt = Some(stmt);
+            self.folder_create_stmt = Some(stmt);
         };
 
-        let r = self.insert_folder_stmt.as_mut().unwrap().execute_named(
+        self.folder_create_stmt.as_mut().unwrap().execute_named(
             &[(":name", &folder.name), 
-            (":parent_folder_id", &folder.parent_folder_id)]);
+            (":parent_folder_id", &folder.parent_folder_id)])?;
 
-        match r {
-            Ok(_updated) => {
-                let id = self.conn.last_insert_rowid();
-                folder.id = id;
-                return id;
-            },
-            Err(err) => {
-                println!("Error: {}", err);
-                return 0;
-            }
+        let id = self.conn.last_insert_rowid();
+        folder.id = id;
+        return Ok(id);
+    }
+
+    pub fn retrieve_folder(&mut self, id: i64)
+        -> Result<models::FolderModel, Error>
+    {
+        if let None = &self.folder_retrieve_stmt {
+            let stmt = self.conn.prepare("SELECT id, name, parent_folder_id FROM folders WHERE id = :id;").unwrap();
+            self.folder_retrieve_stmt = Some(stmt);
+        };
+
+        let mut rows = self.folder_retrieve_stmt.as_mut().unwrap()
+            .query_named(&[(":id", &id)])?;
+
+        while let Some(maybe_row) = rows.next() {
+            let row = maybe_row?;
+            let obj = models::FolderModel {
+                id: row.get(0),
+                parent_folder_id: row.get(1),
+                name: row.get(2),
+                folders: Vec::<models::FolderModel>::new(),
+                files: Vec::<models::FileModel>::new(),
+            };
+            return Ok(obj);
         }
+
+        return Err(Error::QueryReturnedNoRows);
+    }
+
+    pub fn update_folder(&mut self, folder: &mut models::FolderModel) 
+        -> Result<(), Error>
+    {
+        if let None = &self.folder_update_stmt {
+            let stmt = self.conn.prepare("UPDATE folders SET name = :name, parent_folder_id = :parent_folder_id WHERE id = :id;").unwrap();
+            self.folder_update_stmt = Some(stmt);
+        };
+
+        self.folder_update_stmt.as_mut().unwrap().execute_named(
+            &[(":id", &folder.id), 
+            (":name", &folder.name), 
+            (":parent_folder_id", &folder.parent_folder_id)])?;
+        return Ok(());
+    }
+
+    pub fn delete_folder(&mut self, folder: &mut models::FolderModel) 
+        -> Result<(), Error>
+    {
+        if let None = &self.folder_delete_stmt {
+            let stmt = self.conn.prepare("DELETE FROM folders WHERE id = :id;").unwrap();
+            self.folder_delete_stmt = Some(stmt);
+        };
+
+        self.folder_delete_stmt.as_mut().unwrap().execute_named(
+            &[(":id", &folder.id)])?;
+        return Ok(());
     }
 
     pub fn create_file(&mut self, file: &mut models::FileModel) 
-        -> i64
+        -> Result<i64, Error>
     {
-        if let None = &self.insert_file_stmt {
+        if let None = &self.file_create_stmt {
             let stmt = self.conn.prepare("INSERT INTO files (name, parent_folder_id, hash, size, modified_date) 
                 VALUES (:name, :parent_folder_id, :hash, :size, :modified_date)").unwrap();
-            self.insert_file_stmt = Some(stmt);
+            self.file_create_stmt = Some(stmt);
         };
 
         let size_i64 = file.size as i64;
-        let r = self.insert_file_stmt.as_mut().unwrap().execute_named(
+        self.file_create_stmt.as_mut().unwrap().execute_named(
             &[(":name", &file.name), 
             (":parent_folder_id", &file.parent_folder_id),
             (":hash", &file.hash),
             (":size", &size_i64),
             (":modified_date", &file.modified_date),
             ]
-        );
+        )?;
 
-        match r {
-            Ok(_updated) => {
-                let id = self.conn.last_insert_rowid();
-                file.id = id;
-                return id;
-            },
-            Err(err) => {
-                println!("Error: {}", err);
-                return 0;
-            }
-        }
+        let id = self.conn.last_insert_rowid();
+        file.id = id;
+        return Ok(id);
     }
 }
 
