@@ -4,7 +4,7 @@ pub struct FileModel {
     pub parent_folder_id: i64,
     pub name: String,
     pub hash: String,
-    pub size: u64,
+    pub size: i64,
     pub modified_date: String,
 }
 

@@ -18,9 +18,7 @@ fn main()
             println!("Captured {} file and folder records in {} seconds.", folder.total_items(), sec);
 
             // Prepare to begin working on the database
-            {
-                filescandb::context::initialize_database();
-            }
+            filescandb::context::initialize_database();
 
             // Now insert items into the database
             let now = Instant::now();
@@ -39,6 +37,10 @@ fn main()
                 ctxt.update_folder(&read_back).unwrap();
                 let read_back2 = ctxt.retrieve_folder(folder.id).unwrap();
                 println!("Comparing {} {} to readback2: {} {}", folder.id, folder.name, read_back2.id, read_back2.name);
+                ctxt.delete_folder(folder.id).unwrap();
+
+                // Find and test files for duplication
+                let dupes = ctxt.find_potential_duplicate_files().unwrap();
             }
         }
     }

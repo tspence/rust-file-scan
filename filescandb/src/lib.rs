@@ -81,7 +81,7 @@ pub fn list_files_in_folder(path: String)
             match trymd {
                 Err(e) => println!("Cannot observe metadata for {}: {}", child_path.to_str().unwrap(), e.to_string()),
                 Ok(md) => {
-                    let size = md.len();
+                    let size = md.len() as i64;
                     let timestamp = md.modified().unwrap();
                     let chrono_time: DateTime<Utc> = timestamp.into();
                     let file = models::FileModel {

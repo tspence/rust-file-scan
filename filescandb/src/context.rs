@@ -1,6 +1,6 @@
 extern crate rusqlite;
 
-use rusqlite::{ Connection, Statement, Error };
+use rusqlite::{ NO_PARAMS, Connection, Statement, Error };
 
 use crate::models;
 
@@ -32,6 +32,37 @@ impl<'a> RustFileScanDbContext<'a>
             file_update_stmt: None,
             file_delete_stmt: None,
         };
+    }
+
+    pub fn find_potential_duplicate_files(&mut self)
+        -> Result<Vec<models::FileModel>, Error>
+    {
+        // Find potential matches by size
+        let mut stmt = self.conn.prepare(
+            "select f.*
+            from files f
+            inner join (
+                select size from files group by size having count(1) > 1
+            ) s on s.size = f.size;")?;
+        let mut rows = stmt.query(NO_PARAMS)?;
+
+        // Convert results into a vector of matching files
+        let mut results = Vec::<models::FileModel>::new();
+        while let Some(maybe_row) = rows.next() {
+            let row = maybe_row?;
+            let obj = models::FileModel {
+                id: row.get(0),
+                parent_folder_id: row.get(1),
+                name: row.get(2),
+                hash: row.get(3),
+                size: row.get(4),
+                modified_date: row.get(5),
+            };
+            results.push(obj);
+        }
+
+        // Here's the files that might be duplicates
+        return Ok(results);
     }
 
     pub fn create_folder(&mut self, folder: &mut models::FolderModel) 
