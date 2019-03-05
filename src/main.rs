@@ -27,7 +27,8 @@ fn main()
             let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
             println!("Inserted {} items into the database in {} seconds.", folder.total_items(), sec);    
 
-            // Read an item back
+            // Proof of concept: Use all other methods (C/R/U/D) and verify they all work
+            /*
             {
                 let conn = Connection::open("rustfilescan.db").unwrap();
                 let mut ctxt = filescandb::context::RustFileScanDbContext::new(&conn);
@@ -38,10 +39,10 @@ fn main()
                 let read_back2 = ctxt.retrieve_folder(folder.id).unwrap();
                 println!("Comparing {} {} to readback2: {} {}", folder.id, folder.name, read_back2.id, read_back2.name);
                 ctxt.delete_folder(folder.id).unwrap();
+            }*/
 
-                // Find and test files for duplication
-                let dupes = ctxt.find_potential_duplicate_files().unwrap();
-            }
+            // Find and test files for duplication
+            filescandb::find_duplicates().unwrap();
         }
     }
 }

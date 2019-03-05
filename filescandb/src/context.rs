@@ -43,7 +43,8 @@ impl<'a> RustFileScanDbContext<'a>
             from files f
             inner join (
                 select size from files group by size having count(1) > 1
-            ) s on s.size = f.size;")?;
+            ) s on s.size = f.size
+            where f.hash = '';")?;
         let mut rows = stmt.query(NO_PARAMS)?;
 
         // Convert results into a vector of matching files
@@ -145,12 +146,11 @@ impl<'a> RustFileScanDbContext<'a>
             self.file_create_stmt = Some(stmt);
         };
 
-        let size_i64 = file.size as i64;
         self.file_create_stmt.as_mut().unwrap().execute_named(
             &[(":name", &file.name), 
             (":parent_folder_id", &file.parent_folder_id),
             (":hash", &file.hash),
-            (":size", &size_i64),
+            (":size", &file.size),
             (":modified_date", &file.modified_date),
             ]
         )?;
@@ -158,6 +158,31 @@ impl<'a> RustFileScanDbContext<'a>
         let id = self.conn.last_insert_rowid();
         file.id = id;
         return Ok(id);
+    }
+
+    pub fn update_file(&mut self, file: &models::FileModel) 
+        -> Result<(), Error>
+    {
+        if let None = &self.file_update_stmt {
+            let stmt = self.conn.prepare(
+                "UPDATE files 
+                SET name = :name, 
+                parent_folder_id = :parent_folder_id, 
+                hash = :hash, 
+                size = :size, 
+                modified_date = :modified_date 
+                WHERE id = :id;").unwrap();
+            self.file_update_stmt = Some(stmt);
+        };
+
+        self.file_update_stmt.as_mut().unwrap().execute_named(
+            &[(":name", &file.name), 
+            (":parent_folder_id", &file.parent_folder_id),
+            (":hash", &file.hash),
+            (":size", &file.size),
+            (":modified_date", &file.modified_date),
+            ]);
+        return Ok(());
     }
 }
 
