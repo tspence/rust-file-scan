@@ -181,7 +181,7 @@ impl<'a> RustFileScanDbContext<'a>
             (":hash", &file.hash),
             (":size", &file.size),
             (":modified_date", &file.modified_date),
-            ]);
+            ])?;
         return Ok(());
     }
 }
